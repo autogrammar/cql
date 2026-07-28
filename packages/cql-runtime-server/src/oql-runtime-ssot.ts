@@ -1,16 +1,15 @@
 /**
- * Flat OQL v5 SSOT via @semcod/oqlts — mirrors c2004 cql-backend oql_*_ssot.py adapters.
+ * Runtime OQL v6 SSOT via @semcod/oqlts — mirrors c2004 oql_*_ssot.py adapters.
+ *
+ * The parser package may understand older documents so the migration tooling can
+ * read them. The runtime boundary is deliberately narrower: only VERSION: 6 may
+ * be parsed, validated or executed here.
  */
-import { parseOql, validateOql } from '@semcod/oqlts';
+import { parseOql, runtimeOqlVersionIssue, validateOql } from '@semcod/oqlts';
 import type { OqlCommand, OqlParseResult } from '@semcod/oqlts';
 
-// @semcod/oqlts is the single parser for ALL supported OQL versions (v3/v4/v5).
-// Route every `VERSION: 3|4|5` document to it — not just v5 — so v4 GOAL: and v3
-// scenarios execute through the TS runtime instead of the retired legacy parser.
-const VERSION_FLAT_RE = /^\s*VERSION\s*:\s*[345]\s*$/im;
-
-export function isOqlV5Flat(text: string): boolean {
-  return VERSION_FLAT_RE.test(text || '');
+export function runtimeOqlVersionError(text: string): string | null {
+  return runtimeOqlVersionIssue(text)?.message ?? null;
 }
 
 export type LegacyStep = Record<string, unknown>;
@@ -133,8 +132,9 @@ function formatIssue(issue: { line?: number; message?: string }): string {
   return issue.line != null ? `Linia ${issue.line}: ${message}` : message;
 }
 
-export function parseDslSsot(text: string): { ok: boolean; errors: string[]; ast: LegacyAst | null } | null {
-  if (!isOqlV5Flat(text)) return null;
+export function parseDslSsot(text: string): { ok: boolean; errors: string[]; ast: LegacyAst | null } {
+  const versionError = runtimeOqlVersionError(text);
+  if (versionError) return { ok: false, errors: [versionError], ast: null };
   const payload = parseOql(text);
   const errors = (payload.errors ?? []).map((issue) => formatIssue(issue));
   if (errors.length) {
@@ -150,8 +150,17 @@ export function validateDslSsot(text: string): {
   warnings: string[];
   violations: unknown[];
   fixedText: string | null;
-} | null {
-  if (!isOqlV5Flat(text)) return null;
+} {
+  const versionError = runtimeOqlVersionError(text);
+  if (versionError) {
+    return {
+      ok: false,
+      errors: [versionError],
+      warnings: [],
+      violations: [],
+      fixedText: null,
+    };
+  }
   const payload = validateOql(text);
   const errors = (payload.errors ?? []).map((issue) => formatIssue(issue));
   const warnings = (payload.warnings ?? []).map((issue) => formatIssue(issue));

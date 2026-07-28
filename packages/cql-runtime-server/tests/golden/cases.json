@@ -21,7 +21,7 @@
     "id": "exec-simple-set",
     "endpoint": "exec",
     "body": {
-      "text": "SCENARIO: Test\nGOAL: Test Goal\n  SET \"x\" \"5\"\n"
+      "text": "VERSION: 6\nSCENARIO: Test\nTASK:\n  NAME \"Test Goal\"\n  SET \"x\" \"5\"\n"
     },
     "expect": {
       "ok": true,
@@ -32,18 +32,18 @@
     "id": "exec-condition",
     "endpoint": "exec",
     "body": {
-      "text": "SCENARIO: Condition Test\nGOAL: Check\n  SET \"x\" \"5\"\n  IF \"x\" >= \"3\"\n  ELSE ERROR \"Failed\"\n"
+      "text": "VERSION: 6\nSCENARIO: Condition Test\nTASK:\n  NAME 'Prepare'\n  SET 'x' '5'\nTEST_STEP:\n  NAME 'Check'\n  VAL 'x'\n  IF 'x' >= '3'\n  PASS 'x' 'Passed'\n  FAIL 'x' 'Failed'\n"
     },
     "expect": {
       "ok": true,
-      "planKindsIncludes": ["condition", "else"]
+      "planKindsIncludes": ["condition"]
     }
   },
   {
     "id": "exec-log",
     "endpoint": "exec",
     "body": {
-      "text": "SCENARIO: Log Test\nGOAL: Log\n  LOG \"test message\"\n"
+      "text": "VERSION: 6\nSCENARIO: Log Test\nTASK:\n  NAME \"Log\"\n  LOG \"test message\"\n"
     },
     "expect": {
       "ok": true,
@@ -51,36 +51,30 @@
     }
   },
   {
-    "id": "exec-motor2-left",
+    "id": "reject-unmigrated-motor2-left",
     "endpoint": "exec",
     "body": {
       "text": "SCENARIO: Motor\nGOAL: Move\n  motor2 left 1000\n"
     },
     "expect": {
-      "ok": true,
-      "lastTask": {
-        "object": "motor2",
-        "function": "left",
-        "args": { "steps": 1000, "direction": "left" }
-      }
+      "ok": false
     }
   },
   {
-    "id": "exec-motor2-sequence",
+    "id": "reject-unmigrated-motor2-sequence",
     "endpoint": "exec",
     "body": {
       "text": "SCENARIO: Motor\nGOAL: Move\n  motor2 left 1000\n  wait 1s\n  motor2 right 100\n"
     },
     "expect": {
-      "ok": true,
-      "planKinds": ["goal", "task", "wait", "task"]
+      "ok": false
     }
   },
   {
     "id": "parse-minimal",
     "endpoint": "parse",
     "body": {
-      "text": "SCENARIO: Smoke\nGOAL: G1\n  SET 'a' '1'\n"
+      "text": "VERSION: 6\nSCENARIO: Smoke\nTASK:\n  NAME 'G1'\n  SET 'a' '1'\n"
     },
     "expect": {
       "ok": true,
@@ -88,9 +82,9 @@
     }
   },
   {
-    "id": "validate-empty-errors",
+    "id": "validate-v6-minimal",
     "endpoint": "validate",
-    "body": { "text": "SCENARIO: X\nGOAL: Y\n" },
+    "body": { "text": "VERSION: 6\nSCENARIO: X\nTASK:\n  NAME 'Y'\n" },
     "expect": {
       "ok": true
     }

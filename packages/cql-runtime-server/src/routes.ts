@@ -1,28 +1,36 @@
 import {
-  astToDslText,
-  applyMappingToExecPlan,
-  canonicalizeDslQuotes,
   compileOqlHuiProgram,
-  DslScenarioBuilders,
-  executeDsl,
-  executeMappedDsl,
-  formatDslLiteral,
-  highlightDsl,
-  normalizeDslTextQuotes,
-  parseDsl,
-  quoteDslValue,
-  readQuotedToken,
+  migrateOqlToV6,
+} from '@oqlos/cql-runtime';
+import {
+  applyMappingToExecPlan,
   resolveFuncSteps,
   resolveTaskMapping,
-  validateDslFormat,
-} from '@oqlos/cql-runtime';
-import { parseDslSsot, validateDslSsot } from './oql-v5-ssot.ts';
+} from '@oqlos/cql-runtime/mapping';
+import { DslScenarioBuilders } from '@oqlos/cql-runtime/scenario-builders';
+import { executeDsl } from '@oqlos/cql-runtime/exec';
+import {
+  canonicalizeDslQuotes,
+  formatDslLiteral,
+  normalizeDslTextQuotes,
+  quoteDslValue,
+  readQuotedToken,
+} from '@oqlos/cql-runtime/quotes';
+import { highlightDsl } from '@oqlos/cql-runtime/highlight';
+import { astToDslText } from '@oqlos/cql-runtime/serialize';
+import {
+  parseDslSsot,
+  runtimeOqlVersionError,
+  validateDslSsot,
+} from './oql-runtime-ssot.ts';
 import {
   collectOqlGrants,
   canEditOqlLine,
   canReadOqlLine,
   isOqlGrantLine,
+  OQL_MIGRATION_INPUT_VERSIONS,
   oqlLineTarget,
+  RUNTIME_OQL_VERSION,
 } from '@semcod/oqlts';
 
 const VERSION = '0.1.0';
@@ -74,6 +82,9 @@ export async function handleRequest(
       body: {
         runtime: 'node',
         package: '@oqlos/cql-runtime',
+        runtime_oql_version: RUNTIME_OQL_VERSION,
+        accepted_oql_versions: [RUNTIME_OQL_VERSION],
+        migration_input_versions: [...OQL_MIGRATION_INPUT_VERSIONS],
         canonical_prefix: OQL_API_PREFIX,
         implemented: [
           '/api/oql/quote',
@@ -132,66 +143,45 @@ export async function handleRequest(
     }
     case '/api/oql/parse': {
       const ssot = parseDslSsot(text);
-      if (ssot) {
-        return { status: 200, body: { ok: ssot.ok, errors: ssot.errors, ast: ssot.ast } };
-      }
-      const result = parseDsl(text);
-      return {
-        status: 200,
-        body: { ok: result.ok, errors: result.errors, ast: result.ast ?? null },
-      };
+      return { status: 200, body: { ok: ssot.ok, errors: ssot.errors, ast: ssot.ast } };
     }
     case '/api/oql/serialize':
-      return { status: 200, body: { text: astToDslText(body.ast as never) } };
+      return { status: 200, body: { text: migrateOqlToV6(astToDslText(body.ast as never)) } };
     case '/api/oql/validate': {
       const ssot = validateDslSsot(text);
-      if (ssot) {
-        return {
-          status: 200,
-          body: {
-            ok: ssot.ok,
-            errors: ssot.errors,
-            warnings: ssot.warnings,
-            violations: ssot.violations,
-            fixedText: ssot.fixedText,
-          },
-        };
-      }
-      const result = validateDslFormat(text);
       return {
         status: 200,
         body: {
-          ok: result.ok,
-          errors: result.errors,
-          warnings: result.warnings,
-          violations: result.violations,
-          fixedText: result.fixedText,
+          ok: ssot.ok,
+          errors: ssot.errors,
+          warnings: ssot.warnings,
+          violations: ssot.violations,
+          fixedText: ssot.fixedText,
         },
       };
     }
     case '/api/oql/exec': {
-      // v5 `TEST:` dialect: parse via @semcod/oqlts (single language runtime),
-      // then execute the adapted AST with the shared executor — composition, no
-      // duplicate grammar. Legacy `GOAL:` text falls through to executeDsl(text).
+      // Parse the one runtime language via @semcod/oqlts, then execute the
+      // adapted AST with the shared executor — composition, no duplicate grammar.
       const ssot = parseDslSsot(text);
-      if (ssot) {
-        if (!ssot.ok) {
-          return { status: 200, body: { ok: false, errors: ssot.errors, ast: ssot.ast, plan: [] } };
-        }
-        const v5 = executeDsl(ssot.ast as never, body.context as never);
-        return {
-          status: 200,
-          body: { ok: v5.ok, errors: v5.errors, ast: v5.ast ?? ssot.ast, plan: v5.plan },
-        };
+      if (!ssot.ok) {
+        return { status: 200, body: { ok: false, errors: ssot.errors, ast: ssot.ast, plan: [] } };
       }
-      const result = executeDsl(text, body.context as never);
+      const result = executeDsl(ssot.ast as never, body.context as never);
       return {
         status: 200,
-        body: { ok: result.ok, errors: result.errors, ast: result.ast ?? null, plan: result.plan },
+        body: { ok: result.ok, errors: result.errors, ast: result.ast ?? ssot.ast, plan: result.plan },
       };
     }
     case '/api/oql/compile-hui': {
       const systemText = String(body.system_text ?? body.systemText ?? '');
+      const versionErrors = [
+        runtimeOqlVersionError(text),
+        ...(systemText ? [runtimeOqlVersionError(systemText)] : []),
+      ].filter((error): error is string => Boolean(error));
+      if (versionErrors.length) {
+        return { status: 200, body: { ok: false, program: null, errors: versionErrors, warnings: [] } };
+      }
       const program = compileOqlHuiProgram(text, { systemText });
       return {
         status: 200,
@@ -207,17 +197,18 @@ export async function handleRequest(
       const source = String(body.source ?? 'generic');
       const data = (body.data ?? {}) as Record<string, unknown>;
       if (source === 'test') {
+        const dsl = migrateOqlToV6(DslScenarioBuilders.buildDslFromTestScenario(data));
         return {
           status: 200,
           body: {
-            dsl: DslScenarioBuilders.buildDslFromTestScenario(data),
+            dsl,
             goals: DslScenarioBuilders.buildGoalsFromTestScenario(data),
           },
         };
       }
       return {
         status: 200,
-        body: { dsl: DslScenarioBuilders.buildDslFromGenericScenario(data) },
+        body: { dsl: migrateOqlToV6(DslScenarioBuilders.buildDslFromGenericScenario(data)) },
       };
     }
     case '/api/oql/resolve-task': {
@@ -307,12 +298,20 @@ export async function handleRequest(
       };
     }
     case '/api/oql/exec-mapped': {
+      const ssot = parseDslSsot(text);
+      if (!ssot.ok) {
+        return {
+          status: 200,
+          body: { ok: false, errors: ssot.errors, ast: ssot.ast, plan: [], mappedPlan: [] },
+        };
+      }
       const hardwareMap = (body.hardware_map ?? body.hardwareMap ?? {}) as Record<string, unknown>;
-      const result = executeMappedDsl(String(body.text ?? ''), hardwareMap, {
-        environment: (body.environment as string | null | undefined) ?? null,
-        usageMode: (body.usage_mode as string | null | undefined) ?? (body.usageMode as string | null | undefined) ?? null,
-        execContext: body.context as Record<string, unknown> | undefined,
-      });
+      const environment = (body.environment as string | null | undefined) ?? null;
+      const usageMode = (body.usage_mode as string | null | undefined)
+        ?? (body.usageMode as string | null | undefined)
+        ?? null;
+      const result = executeDsl(ssot.ast as never, body.context as never);
+      const mappedPlan = applyMappingToExecPlan(result.plan ?? [], hardwareMap, { environment, usageMode });
       return {
         status: 200,
         body: {
@@ -320,7 +319,7 @@ export async function handleRequest(
           errors: result.errors,
           ast: result.ast ?? null,
           plan: result.plan,
-          mappedPlan: result.mappedPlan,
+          mappedPlan,
         },
       };
     }

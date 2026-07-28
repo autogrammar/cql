@@ -44,11 +44,12 @@ describe('oql-runtime-server routes (in-process)', () => {
 
   it('parse + exec minimal DSL', async () => {
     const dsl = [
+      'VERSION: 6',
       'SCENARIO: smoke',
       '',
-      'GOAL: G1',
+      'TASK:',
+      "  NAME 'G1'",
       "  SET 'x' '1'",
-      "  IF 'x' = '1'",
     ].join('\n');
 
     const parsed = await handleRequest('POST', '/api/oql/parse', { text: dsl });
@@ -94,12 +95,12 @@ describe('oql-runtime-server routes (in-process)', () => {
   it('compiles the event-driven HUI dialect through the shared OQL runtime', async () => {
     const response = await handleRequest('POST', '/api/oql/compile-hui', {
       system_text: [
-        'VERSION: 5',
+        'VERSION: 6',
         'CONFIG:',
         "  PROCESS 'measurement.read' URI 'c2004://measurement/sensors/query/read' MODE 'execute'",
       ].join('\n'),
       text: [
-        'VERSION: 5',
+        'VERSION: 6',
         "EVENT 'frontend.ready':",
         "  RUN_URI 'c2004://measurement/sensors/query/read' MODE 'execute' PAYLOAD '{}'",
       ].join('\n'),
@@ -113,6 +114,41 @@ describe('oql-runtime-server routes (in-process)', () => {
     assert.equal(body.ok, true);
     assert.ok(body.program.processes['measurement.read']);
     assert.ok(body.program.events['frontend.ready']);
+  });
+
+  it('migrates scenario-builder output to valid V6 before returning it', async () => {
+    const built = await handleRequest('POST', '/api/oql/scenario-build', {
+      source: 'test',
+      data: {
+        name: 'Pressure test',
+        activities: [{ name: 'Pressure', criteria: { min: 10, max: 20, unit: 'bar' } }],
+      },
+    });
+    const dsl = (built?.body as { dsl: string }).dsl;
+    assert.match(dsl, /^VERSION: 6/m);
+    assert.match(dsl, /^TEST_STEP:$/m);
+
+    const parsed = await handleRequest('POST', '/api/oql/parse', { text: dsl });
+    assert.equal((parsed?.body as { ok: boolean; errors: string[] }).ok, true);
+  });
+
+  it('migrates serialized compatibility AST output to valid V6', async () => {
+    const serialized = await handleRequest('POST', '/api/oql/serialize', {
+      ast: {
+        scenario: 'Serialized',
+        goals: [{
+          name: 'Prepare',
+          tasks: [],
+          conditions: [],
+          steps: [{ type: 'set', parameter: 'pump', value: 'off' }],
+        }],
+        funcs: [],
+      },
+    });
+    const text = (serialized?.body as { text: string }).text;
+    assert.match(text, /^VERSION: 6/m);
+    const parsed = await handleRequest('POST', '/api/oql/parse', { text });
+    assert.equal((parsed?.body as { ok: boolean }).ok, true);
   });
 });
 
