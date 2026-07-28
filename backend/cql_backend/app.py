@@ -16,19 +16,29 @@ Endpoint maturity:
       follow-up task note. Callers receive a structured error so they can
       detect the missing capability at runtime.
 """
+
 from __future__ import annotations
 
 import os
 import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
 
 from . import __version__
+from .api_models import (
+    AstIn,
+    AstOnlyIn,
+    ExecIn,
+    HighlightIn,
+    QuotedTokenIn,
+    ScenarioBuildIn,
+    TextIn,
+    ValueIn,
+    XmlIn,
+    XmlMigrateIn,
+)
 from .clients import maskservice_client
 from .highlight import highlight_dsl
 from .quotes import (
@@ -43,11 +53,12 @@ from .serializer import ast_to_dsl_text
 from .validator import validate_dsl_format
 from .exec_runtime import execute_dsl
 from .scenario_builders import DslScenarioBuilders
-from .schema import DSL_JSON_SCHEMA, get_json_schema, validate_ast
+from .schema import get_json_schema, validate_ast
 from .migrate_xml import migrate_legacy_xml_to_dsl, split_legacy_xml_to_scenarios
 from .validate_db import validate_dsl_text
 from .xml_codec import ast_to_xml, dsl_to_xml, xml_to_ast
 from .xsd import DSL_XSD
+from .scenario_files import router as scenario_files_router
 
 
 @asynccontextmanager
@@ -115,50 +126,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ── Models ──────────────────────────────────────────────────────────────
-
-
-class TextIn(BaseModel):
-    text: str = Field("", description="DSL source text.")
-
-
-class ValueIn(BaseModel):
-    value: str = Field("", description="Raw value to quote.")
-
-
-class HighlightIn(TextIn):
-    mode: str = Field(
-        "html",
-        pattern="^(html|tokens)$",
-        description="Only 'html' is implemented; 'tokens' returns 501 until the full port lands.",
-    )
-
-
-class AstIn(BaseModel):
-    ast: dict = Field(..., description="DSL AST to serialize.")
-
-
-class ScenarioBuildIn(BaseModel):
-    source: str = Field("test", description="Source type: 'test' or 'generic'.")
-    data: dict = Field(..., description="Scenario data to build DSL from.")
-
-
-class QuotedTokenIn(BaseModel):
-    token: str = Field("", description="Single quoted literal to parse.")
-
-
-class AstOnlyIn(BaseModel):
-    ast: object = Field(..., description="AST value to validate against the DSL JSON Schema.")
-
-
-class XmlIn(BaseModel):
-    xml: str = Field("", description="XML document to parse.")
-
-
-class XmlMigrateIn(XmlIn):
-    nameHint: str | None = Field(None, description="Optional scenario name hint when XML omits one.")
+app.include_router(scenario_files_router)
 
 
 # ── Health / meta ──────────────────────────────────────────────────────
@@ -208,11 +176,18 @@ async def bridge_scenario(scenario_id: str) -> dict[str, object]:
     try:
         record = await maskservice_client.fetch_scenario(scenario_id)
     except maskservice_client.MaskserviceUnavailable as exc:
-        raise HTTPException(status_code=503, detail={"error": "maskservice unreachable", "detail": str(exc)}) from exc
+        raise HTTPException(
+            status_code=503, detail={"error": "maskservice unreachable", "detail": str(exc)}
+        ) from exc
     except maskservice_client.MaskserviceError as exc:
-        raise HTTPException(status_code=exc.status or 502, detail={"error": "maskservice error", "detail": exc.detail}) from exc
+        raise HTTPException(
+            status_code=exc.status or 502,
+            detail={"error": "maskservice error", "detail": exc.detail},
+        ) from exc
     if record is None:
-        raise HTTPException(status_code=404, detail={"error": "scenario not found", "id": scenario_id})
+        raise HTTPException(
+            status_code=404, detail={"error": "scenario not found", "id": scenario_id}
+        )
     return {"source": "maskservice", "scenario": record}
 
 
@@ -335,11 +310,6 @@ async def validate_endpoint(payload: TextIn) -> dict[str, object]:
 
 
 # ── Exec (full port) ──────────────────────────────────────────────────────
-
-
-class ExecIn(BaseModel):
-    text: str = Field("", description="DSL source text to execute.")
-    context: dict | None = Field(None, description="Optional execution context (getParamValue, runTask).")
 
 
 @app.post("/api/cql/exec", tags=["runtime"])
@@ -471,63 +441,3 @@ async def xml_split_endpoint(payload: XmlMigrateIn) -> dict[str, object]:
     """
     scenarios = split_legacy_xml_to_scenarios(payload.xml, payload.nameHint)
     return {"scenarios": scenarios, "count": len(scenarios)}
-
-
-def _get_scenarios_dir() -> Path:
-    scenarios_path = os.environ.get("SCENARIOS_DIR", "/app/scenarios")
-    return Path(scenarios_path)
-
-
-@app.get("/api/cql/scenario-files", tags=["files"])
-async def list_scenario_files() -> dict[str, object]:
-    scenarios_dir = _get_scenarios_dir()
-    if not scenarios_dir.exists():
-        return {"files": [], "count": 0, "directory": str(scenarios_dir)}
-
-    files = []
-    for file_path in sorted(scenarios_dir.glob("*.oql")):
-        stat = file_path.stat()
-        files.append(
-            {
-                "name": file_path.name,
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-                "path": str(file_path.relative_to(scenarios_dir)),
-            }
-        )
-
-    return {
-        "files": files,
-        "count": len(files),
-        "directory": str(scenarios_dir),
-    }
-
-
-@app.get("/api/cql/scenario-files/{filename}", tags=["files"])
-async def get_scenario_file(filename: str) -> FileResponse:
-    scenarios_dir = _get_scenarios_dir()
-    file_path = scenarios_dir / filename
-
-    if not file_path.resolve().is_relative_to(scenarios_dir.resolve()):
-        raise HTTPException(status_code=403, detail={"error": "invalid filename"})
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail={"error": "file not found", "filename": filename})
-
-    return FileResponse(file_path, media_type="text/plain", filename=filename)
-
-
-@app.post("/api/cql/scenario-files/{filename}", tags=["files"])
-async def save_scenario_file(filename: str, content: TextIn) -> dict[str, str]:
-    scenarios_dir = _get_scenarios_dir()
-    file_path = scenarios_dir / filename
-
-    if not file_path.resolve().is_relative_to(scenarios_dir.resolve()):
-        raise HTTPException(status_code=403, detail={"error": "invalid filename"})
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(content.text, encoding="utf-8")
-
-    return {"status": "saved", "filename": filename, "path": str(file_path)}
-
-
