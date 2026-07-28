@@ -23,8 +23,8 @@ WORKDIR /app/packages/cql-runtime-server
 # present at runtime — do NOT use --omit=dev here.
 RUN npm install
 
-ENV CQL_RUNTIME_HOST=0.0.0.0
-ENV CQL_RUNTIME_PORT=8101
+ENV OQL_RUNTIME_HOST=0.0.0.0
+ENV OQL_RUNTIME_PORT=8101
 EXPOSE 8101
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

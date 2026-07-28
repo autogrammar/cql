@@ -27,7 +27,7 @@ function planKinds(body: Record<string, unknown>): string[] {
 for (const testCase of cases) {
   describe(`extension:${testCase.id}`, () => {
     it('documents current Node runtime behavior (Python port may differ)', async () => {
-      const res = await handleRequest('POST', `/api/cql/${testCase.endpoint}`, testCase.body);
+      const res = await handleRequest('POST', `/api/oql/${testCase.endpoint}`, testCase.body);
       assert.equal(res?.status, 200);
       const body = res?.body as Record<string, unknown>;
       const expect = testCase.expectNode;

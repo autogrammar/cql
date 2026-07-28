@@ -35,7 +35,7 @@ function lastTask(body: Record<string, unknown>): Record<string, unknown> | null
 for (const testCase of cases) {
   describe(`golden:${testCase.id}`, () => {
     it(`matches Node runtime expectations`, async () => {
-      const path = `/api/cql/${testCase.endpoint}`;
+      const path = `/api/oql/${testCase.endpoint}`;
       const res = await handleRequest('POST', path, testCase.body);
       assert.equal(res?.status, 200, `${testCase.id} HTTP status`);
       const body = res?.body as Record<string, unknown>;

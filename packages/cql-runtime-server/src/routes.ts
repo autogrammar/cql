@@ -26,6 +26,7 @@ import {
 } from '@semcod/oqlts';
 
 const VERSION = '0.1.0';
+const OQL_API_PREFIX = '/api/oql/';
 
 export type JsonBody = Record<string, unknown>;
 
@@ -64,57 +65,58 @@ export async function handleRequest(
   body: JsonBody,
 ): Promise<{ status: number; body: unknown } | null> {
   if (method === 'GET' && pathname === '/health') {
-    return { status: 200, body: { status: 'ok', service: 'cql-runtime-server', version: VERSION } };
+    return { status: 200, body: { status: 'ok', service: 'oql-runtime-server', version: VERSION } };
   }
 
-  if (method === 'GET' && pathname === '/api/cql/capabilities') {
+  if (method === 'GET' && pathname === '/api/oql/capabilities') {
     return {
       status: 200,
       body: {
         runtime: 'node',
         package: '@oqlos/cql-runtime',
+        canonical_prefix: OQL_API_PREFIX,
         implemented: [
-          '/api/cql/quote',
-          '/api/cql/unquote',
-          '/api/cql/format-literal',
-          '/api/cql/canonicalize',
-          '/api/cql/normalize',
-          '/api/cql/highlight',
-          '/api/cql/parse',
-          '/api/cql/serialize',
-          '/api/cql/validate',
-          '/api/cql/exec',
-          '/api/cql/compile-hui',
-          '/api/cql/access-check',
-          '/api/cql/read-projection',
-          '/api/cql/scenario-build',
-          '/api/cql/resolve-task',
-          '/api/cql/resolve-func',
-          '/api/cql/exec-mapped',
+          '/api/oql/quote',
+          '/api/oql/unquote',
+          '/api/oql/format-literal',
+          '/api/oql/canonicalize',
+          '/api/oql/normalize',
+          '/api/oql/highlight',
+          '/api/oql/parse',
+          '/api/oql/serialize',
+          '/api/oql/validate',
+          '/api/oql/exec',
+          '/api/oql/compile-hui',
+          '/api/oql/access-check',
+          '/api/oql/read-projection',
+          '/api/oql/scenario-build',
+          '/api/oql/resolve-task',
+          '/api/oql/resolve-func',
+          '/api/oql/exec-mapped',
         ],
         stubbed_501: [],
       },
     };
   }
 
-  if (method !== 'POST' || !pathname.startsWith('/api/cql/')) {
+  if (method !== 'POST' || !pathname.startsWith(OQL_API_PREFIX)) {
     return null;
   }
 
   const text = String(body.text ?? '');
 
   switch (pathname) {
-    case '/api/cql/quote':
+    case '/api/oql/quote':
       return { status: 200, body: { quoted: quoteDslValue(body.value) } };
-    case '/api/cql/unquote':
+    case '/api/oql/unquote':
       return { status: 200, body: readQuotedToken(String(body.token ?? '')) };
-    case '/api/cql/format-literal':
+    case '/api/oql/format-literal':
       return { status: 200, body: { literal: formatDslLiteral(String(body.value ?? '')) } };
-    case '/api/cql/canonicalize':
+    case '/api/oql/canonicalize':
       return { status: 200, body: { text: canonicalizeDslQuotes(text) } };
-    case '/api/cql/normalize':
+    case '/api/oql/normalize':
       return { status: 200, body: { text: normalizeDslTextQuotes(text) } };
-    case '/api/cql/highlight': {
+    case '/api/oql/highlight': {
       if (body.mode === 'tokens') {
         return {
           status: 501,
@@ -128,7 +130,7 @@ export async function handleRequest(
       }
       return { status: 200, body: { html: highlightDsl(text) } };
     }
-    case '/api/cql/parse': {
+    case '/api/oql/parse': {
       const ssot = parseDslSsot(text);
       if (ssot) {
         return { status: 200, body: { ok: ssot.ok, errors: ssot.errors, ast: ssot.ast } };
@@ -139,9 +141,9 @@ export async function handleRequest(
         body: { ok: result.ok, errors: result.errors, ast: result.ast ?? null },
       };
     }
-    case '/api/cql/serialize':
+    case '/api/oql/serialize':
       return { status: 200, body: { text: astToDslText(body.ast as never) } };
-    case '/api/cql/validate': {
+    case '/api/oql/validate': {
       const ssot = validateDslSsot(text);
       if (ssot) {
         return {
@@ -167,7 +169,7 @@ export async function handleRequest(
         },
       };
     }
-    case '/api/cql/exec': {
+    case '/api/oql/exec': {
       // v5 `TEST:` dialect: parse via @semcod/oqlts (single language runtime),
       // then execute the adapted AST with the shared executor — composition, no
       // duplicate grammar. Legacy `GOAL:` text falls through to executeDsl(text).
@@ -188,7 +190,7 @@ export async function handleRequest(
         body: { ok: result.ok, errors: result.errors, ast: result.ast ?? null, plan: result.plan },
       };
     }
-    case '/api/cql/compile-hui': {
+    case '/api/oql/compile-hui': {
       const systemText = String(body.system_text ?? body.systemText ?? '');
       const program = compileOqlHuiProgram(text, { systemText });
       return {
@@ -201,7 +203,7 @@ export async function handleRequest(
         },
       };
     }
-    case '/api/cql/scenario-build': {
+    case '/api/oql/scenario-build': {
       const source = String(body.source ?? 'generic');
       const data = (body.data ?? {}) as Record<string, unknown>;
       if (source === 'test') {
@@ -218,7 +220,7 @@ export async function handleRequest(
         body: { dsl: DslScenarioBuilders.buildDslFromGenericScenario(data) },
       };
     }
-    case '/api/cql/resolve-task': {
+    case '/api/oql/resolve-task': {
       const hardwareMap = (body.hardware_map ?? body.hardwareMap ?? {}) as Record<string, unknown>;
       const task = (body.task ?? {}) as Record<string, unknown>;
       const resolved = resolveTaskMapping(hardwareMap, task, {
@@ -227,7 +229,7 @@ export async function handleRequest(
       });
       return { status: resolved.ok ? 200 : 400, body: resolved };
     }
-    case '/api/cql/resolve-func': {
+    case '/api/oql/resolve-func': {
       const hardwareMap = (body.hardware_map ?? body.hardwareMap ?? {}) as Record<string, unknown>;
       const funcName = String(body.func_name ?? body.funcName ?? '');
       const result = resolveFuncSteps(hardwareMap, funcName, {
@@ -236,7 +238,7 @@ export async function handleRequest(
       });
       return { status: result.ok === false ? 400 : 200, body: result };
     }
-    case '/api/cql/access-check': {
+    case '/api/oql/access-check': {
       // Server-side ACCESS: given the OLD scenario's inline ALLOW/DENY grants,
       // is `role` allowed to turn old_text into new_text? Mirrors the editor's
       // per-line lock — the single grant engine (@semcod/oqlts) is the authority.
@@ -261,7 +263,7 @@ export async function handleRequest(
         .map((i) => ({ line: i + 1, text: oldLines[i] }));
       return { status: 200, body: { allowed: violations.length === 0, violations } };
     }
-    case '/api/cql/read-projection': {
+    case '/api/oql/read-projection': {
       // Produce the only source projection that may be returned to an editor or
       // browser runtime. Policy declarations are system-only; ordinary OQL
       // lines follow DENY ... READ grants from the complete composed program.
@@ -304,7 +306,7 @@ export async function handleRequest(
         },
       };
     }
-    case '/api/cql/exec-mapped': {
+    case '/api/oql/exec-mapped': {
       const hardwareMap = (body.hardware_map ?? body.hardwareMap ?? {}) as Record<string, unknown>;
       const result = executeMappedDsl(String(body.text ?? ''), hardwareMap, {
         environment: (body.environment as string | null | undefined) ?? null,

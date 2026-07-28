@@ -2,8 +2,8 @@ import http from 'node:http';
 
 import { handleRequest, jsonResponse, readJsonBody } from './routes.ts';
 
-const host = process.env.CQL_RUNTIME_HOST ?? '0.0.0.0';
-const port = Number(process.env.CQL_RUNTIME_PORT ?? process.env.CQL_BACKEND_PORT ?? 8101);
+const host = process.env.OQL_RUNTIME_HOST ?? '0.0.0.0';
+const port = Number(process.env.OQL_RUNTIME_PORT ?? 8101);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
@@ -25,5 +25,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, host, () => {
   // eslint-disable-next-line no-console
-  console.log(`cql-runtime-server listening on http://${host}:${port}`);
+  console.log(`oql-runtime-server listening on http://${host}:${port}`);
 });

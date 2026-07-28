@@ -35,11 +35,11 @@ function request(
   });
 }
 
-describe('cql-runtime-server routes (in-process)', () => {
+describe('oql-runtime-server routes (in-process)', () => {
   it('health reports node runtime', async () => {
     const res = await handleRequest('GET', '/health', {});
     assert.equal(res?.status, 200);
-    assert.equal(res?.body.service, 'cql-runtime-server');
+    assert.equal(res?.body.service, 'oql-runtime-server');
   });
 
   it('parse + exec minimal DSL', async () => {
@@ -51,11 +51,11 @@ describe('cql-runtime-server routes (in-process)', () => {
       "  IF 'x' = '1'",
     ].join('\n');
 
-    const parsed = await handleRequest('POST', '/api/cql/parse', { text: dsl });
+    const parsed = await handleRequest('POST', '/api/oql/parse', { text: dsl });
     assert.equal(parsed?.status, 200);
     assert.equal((parsed?.body as { ok: boolean }).ok, true);
 
-    const executed = await handleRequest('POST', '/api/cql/exec', { text: dsl });
+    const executed = await handleRequest('POST', '/api/oql/exec', { text: dsl });
     assert.equal(executed?.status, 200);
     assert.equal((executed?.body as { ok: boolean }).ok, true);
     const plan = (executed?.body as { plan: unknown[] }).plan;
@@ -70,7 +70,7 @@ describe('cql-runtime-server routes (in-process)', () => {
       "VAL 'pressure'",
     ].join('\n');
 
-    const operator = await handleRequest('POST', '/api/cql/read-projection', {
+    const operator = await handleRequest('POST', '/api/oql/read-projection', {
       role: 'operator',
       policy_text: policy,
       documents: [{ id: 'scenario', text: policy }],
@@ -80,7 +80,7 @@ describe('cql-runtime-server routes (in-process)', () => {
     assert.equal(operatorDocument.text, "VAL 'pressure'");
     assert.equal(operatorDocument.hidden_lines, 3);
 
-    const system = await handleRequest('POST', '/api/cql/read-projection', {
+    const system = await handleRequest('POST', '/api/oql/read-projection', {
       role: 'system',
       policy_text: policy,
       documents: [{ id: 'scenario', text: policy }],
@@ -92,7 +92,7 @@ describe('cql-runtime-server routes (in-process)', () => {
   });
 
   it('compiles the event-driven HUI dialect through the shared OQL runtime', async () => {
-    const response = await handleRequest('POST', '/api/cql/compile-hui', {
+    const response = await handleRequest('POST', '/api/oql/compile-hui', {
       system_text: [
         'VERSION: 5',
         'CONFIG:',
@@ -116,7 +116,7 @@ describe('cql-runtime-server routes (in-process)', () => {
   });
 });
 
-describe('cql-runtime-server HTTP', () => {
+describe('oql-runtime-server HTTP', () => {
   let server: http.Server;
   let baseUrl = '';
 
@@ -150,8 +150,14 @@ describe('cql-runtime-server HTTP', () => {
   });
 
   it('quote endpoint matches Python contract shape', async () => {
-    const res = await request(baseUrl, 'POST', '/api/cql/quote', { value: 'hello' });
+    const res = await request(baseUrl, 'POST', '/api/oql/quote', { value: 'hello' });
     assert.equal(res.status, 200);
     assert.equal(res.json.quoted, "'hello'");
+  });
+
+  it('rejects the removed legacy API prefix', async () => {
+    const res = await request(baseUrl, 'POST', '/api/cql/quote', { value: 'legacy' });
+    assert.equal(res.status, 404);
+    assert.equal(res.json.error, 'not found');
   });
 });

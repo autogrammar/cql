@@ -19,7 +19,7 @@ const cases = JSON.parse(readFileSync(join(here, 'golden', 'cases-mapping.json')
 for (const testCase of cases) {
   describe(`golden-mapping:${testCase.id}`, () => {
     it('resolves hardware MAP bindings', async () => {
-      const res = await handleRequest('POST', `/api/cql/${testCase.endpoint}`, testCase.body);
+      const res = await handleRequest('POST', `/api/oql/${testCase.endpoint}`, testCase.body);
       const body = res?.body as Record<string, unknown>;
       const expect = testCase.expect;
       assert.equal(res?.status, expect.ok === false ? 400 : 200, `${testCase.id} status`);

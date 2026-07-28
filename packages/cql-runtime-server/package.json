@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Node HTTP service exposing /api/cql/* — same contract as Python cql-backend, backed by @oqlos/cql-runtime",
+  "description": "Node HTTP service exposing the canonical /api/oql/* contract",
   "scripts": {
     "start": "node --import tsx src/server.ts",
-    "dev": "CQL_RUNTIME_PORT=8101 node --import tsx --watch src/server.ts",
+    "dev": "OQL_RUNTIME_PORT=8101 node --import tsx --watch src/server.ts",
     "test": "node --import tsx --test tests/*.test.ts tests/golden-parity.test.ts tests/golden-extensions.test.ts tests/golden-mapping.test.ts",
     "test:golden": "node --import tsx --test tests/golden-parity.test.ts",
     "parity:python": "python3 scripts/parity-with-python.py"
