@@ -248,7 +248,7 @@ strategies:
     test: npm test
     build: npm run build
     publish: npm publish
-    publish_enabled: true
+    publish_enabled: false
     dependencies:
       file: package-lock.json
       lock: npm install
