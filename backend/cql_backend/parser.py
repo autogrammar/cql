@@ -5,7 +5,6 @@ Recursive-descent parser producing a JSON-friendly AST matching the TS one.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Any
 
 from .quotes import normalize_dsl_text_quotes
@@ -693,146 +692,10 @@ def _parse_dialog_line(
     return True
 
 
-@dataclass
-class _LineCtx:
-    ln: str
-    normalized: str
-    line_num: int
-    ast: DslAst
-    state: _ParserState
-    errors: list[str]
-
-
-def _try_parse_header(ctx: _LineCtx) -> bool:
-    m: re.Match[str] | None
-    if (m := RX_SCENARIO.match(ctx.normalized)):
-        ctx.ast.scenario = m.group(1).strip()
-        return True
-    if (m := RX_GOAL.match(ctx.normalized)):
-        _parse_goal_line(m, ctx.ast, ctx.state)
-        return True
-    if (m := RX_FUNC.match(ctx.normalized)):
-        _parse_func_line(ctx.ln, m, ctx.ast, ctx.state)
-        return True
-    if (m := RX_FUNC_CALL_BR.match(ctx.normalized)):
-        return _parse_func_call_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_TASK.match(ctx.normalized)):
-        if not ctx.state.cur_goal and not ctx.state.cur_func:
-            _add_error(ctx.errors, ctx.line_num, 'TASK bez GOAL/FUNC')
-            return True
-        ctx.state.cur_task = None
-        return True
-    if (m := RX_TASK_INLINE.match(ctx.normalized)):
-        return _parse_task_inline_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_ACT.match(ctx.normalized)):
-        return _parse_act_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num, ctx.state)
-    if (m := RX_AND.match(ctx.normalized)):
-        return _parse_and_line(m, ctx.state.cur_task, ctx.errors, ctx.line_num)
-    return False
-
-
-def _try_parse_if_else(ctx: _LineCtx) -> bool:
-    m: re.Match[str] | None
-    if (m := RX_IF_COMPOUND_OR_IF.match(ctx.normalized)):
-        return _parse_if_compound_or_if_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_IF_COMPOUND.match(ctx.normalized)):
-        return _parse_if_compound_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_IF_OP_STR.match(ctx.normalized)):
-        return _parse_if_op_str_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_IF_STR.match(ctx.normalized)):
-        return _parse_if_str_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_OR_IF.match(ctx.normalized)):
-        return _parse_or_if_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_IF_INFIX.match(ctx.normalized)) or (m := RX_IF_BR.match(ctx.normalized)) or (m := RX_IF_PAR.match(ctx.normalized)):
-        _parse_if_standard_line(m, ctx.state.cur_goal, ctx.state.cur_func)
-        return True
-    if (m := RX_ELSE.match(ctx.normalized)):
-        return _parse_else_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_ELSE_PLAIN.match(ctx.normalized)):
-        return _parse_else_plain_line(ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    return False
-
-
-def _try_parse_declarations(ctx: _LineCtx) -> bool:
-    m: re.Match[str] | None
-    if (m := RX_GET.match(ctx.normalized)):
-        return _create_param_step('get', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_VAL.match(ctx.normalized)):
-        return _create_param_step('val', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_SET_QUOTED.match(ctx.normalized)):
-        return _parse_set_quoted_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_SET.match(ctx.normalized)):
-        return _parse_set_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_MAX.match(ctx.normalized)):
-        return _parse_limit_line('max', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_MIN.match(ctx.normalized)):
-        return _parse_limit_line('min', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_DELTA_MAX.match(ctx.normalized)):
-        return _parse_delta_line('delta_max', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_DELTA_MIN.match(ctx.normalized)):
-        return _parse_delta_line('delta_min', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_WAIT.match(ctx.normalized)):
-        return _parse_wait_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_PUMP.match(ctx.normalized)):
-        return _parse_pump_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    return False
-
-
-def _try_parse_misc_logging(ctx: _LineCtx) -> bool:
-    m: re.Match[str] | None
-    if (m := RX_LOG.match(ctx.normalized)):
-        return _parse_simple_line('log', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_ALARM.match(ctx.normalized)):
-        return _parse_simple_line('alarm', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_ERROR.match(ctx.normalized)):
-        return _parse_simple_line('error', m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_SAVE.match(ctx.normalized)):
-        return _parse_save_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_SAMPLE.match(ctx.normalized)):
-        return _parse_sample_line(m, ctx.state.cur_goal, ctx.errors, ctx.line_num)
-    if (m := RX_CALC.match(ctx.normalized)):
-        return _parse_calc_line(m, ctx.state.cur_goal, ctx.errors, ctx.line_num)
-    if (m := RX_FUN.match(ctx.normalized)):
-        return _parse_fun_line(m, ctx.state.cur_goal, ctx.errors, ctx.line_num)
-    return False
-
-
-def _try_parse_misc_control(ctx: _LineCtx) -> bool:
-    m: re.Match[str] | None
-    if (m := RX_USER.match(ctx.normalized)):
-        return _parse_user_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_RESULT.match(ctx.normalized)):
-        return _parse_result_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_OPT.match(ctx.normalized)):
-        return _parse_opt_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_INFO.match(ctx.normalized)):
-        return _parse_info_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_REPEAT.match(ctx.normalized)):
-        return _parse_repeat_line(ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_END.match(ctx.normalized)):
-        return _parse_end_line(ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_OUT.match(ctx.normalized)):
-        return _parse_out_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    if (m := RX_DIALOG.match(ctx.normalized)):
-        return _parse_dialog_line(m, ctx.state.cur_goal, ctx.state.cur_func, ctx.errors, ctx.line_num)
-    return False
-
-
-def _try_parse_misc(ctx: _LineCtx) -> bool:
-    return _try_parse_misc_logging(ctx) or _try_parse_misc_control(ctx)
-
-
-def _try_parse_line(ctx: _LineCtx) -> bool:
-    return (
-        _try_parse_header(ctx)
-        or _try_parse_if_else(ctx)
-        or _try_parse_declarations(ctx)
-        or _try_parse_misc(ctx)
-    )
-
-
 def parse_dsl(text: str) -> ParseResult:
     """Parse DSL text into an AST."""
+    from .parser_dispatch import LineCtx, try_parse_line
+
     errors: list[str] = []
     lines = (text or '').split('\n')
     ast = DslAst(scenario='', goals=[], funcs=[])
@@ -842,7 +705,7 @@ def parse_dsl(text: str) -> ParseResult:
         if not ln.strip():
             continue
         normalized_ln = normalize_dsl_text_quotes(ln)
-        ctx = _LineCtx(
+        ctx = LineCtx(
             ln=ln,
             normalized=normalized_ln,
             line_num=i + 1,
@@ -850,7 +713,7 @@ def parse_dsl(text: str) -> ParseResult:
             state=state,
             errors=errors,
         )
-        if _try_parse_line(ctx):
+        if try_parse_line(ctx):
             continue
         if re.match(r'^\s*#', normalized_ln):
             continue

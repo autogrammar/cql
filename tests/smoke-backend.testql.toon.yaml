@@ -1,0 +1,6 @@
+# SCENARIO: CQL backend smoke
+# TYPE: shell
+# VERSION: 1
+
+SHELL[1]{command, exit_code}:
+  python -m pytest backend/tests/test_scenario_builders.py backend/tests/test_parser.py -q, 0
