@@ -514,21 +514,28 @@ function _applyGoalThreshold(map, goal) {
   entry.unit = goal.minUnit || goal.maxUnit || goal.valUnit || entry.unit;
 }
 
+function _applyScalarCondition(entry, step) {
+  if (!step.condition || step.value == null) return;
+  if (step.condition === '>=' || step.condition === '>') {
+    entry.min = entry.min || step.value;
+    return;
+  }
+  if (step.condition === '<=' || step.condition === '<') {
+    entry.max = entry.max || step.value;
+    return;
+  }
+  if (step.condition === '=' && entry.min == null && entry.max == null) {
+    entry.min = step.value;
+    entry.max = step.value;
+  }
+}
+
 function _applyStepThreshold(map, step) {
   if (step.type !== 'CHECK' || !step.parameter) return;
   const entry = _ensureThreshold(map, step.parameter);
   if (step.min) entry.min = entry.min || step.min;
   if (step.max) entry.max = entry.max || step.max;
-  // Scalar comparisons (IF param >= '65 bar') carry condition/value instead
-  // of min/max — derive a range from them so the thresholds table isn't blank.
-  if (step.condition && step.value != null) {
-    if (step.condition === '>=' || step.condition === '>') entry.min = entry.min || step.value;
-    else if (step.condition === '<=' || step.condition === '<') entry.max = entry.max || step.value;
-    else if (step.condition === '=' && entry.min == null && entry.max == null) {
-      entry.min = step.value;
-      entry.max = step.value;
-    }
-  }
+  _applyScalarCondition(entry, step);
   if (step.unit) entry.unit = entry.unit || step.unit;
 }
 
