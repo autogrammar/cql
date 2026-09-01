@@ -90,36 +90,78 @@ def _validate_payload(result) -> dict[str, Any]:
     return {"ok": result.ok}
 
 
+def _check_ok(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "ok" not in expect or body.get("ok") == expect["ok"]:
+        return []
+    return [f"ok expected {expect['ok']} got {body.get('ok')}"]
+
+
+def _check_quoted(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "quoted" not in expect or body.get("quoted") == expect["quoted"]:
+        return []
+    return ["quoted mismatch"]
+
+
+def _check_text(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "text" not in expect or body.get("text") == expect["text"]:
+        return []
+    return ["text mismatch"]
+
+
+def _check_plan_kinds(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "planKinds" not in expect:
+        return []
+    kinds = _plan_kinds(body.get("plan") or [])
+    if kinds == expect["planKinds"]:
+        return []
+    return [f"planKinds expected {expect['planKinds']} got {kinds}"]
+
+
+def _check_plan_kinds_includes(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "planKindsIncludes" not in expect:
+        return []
+    kinds = _plan_kinds(body.get("plan") or [])
+    return [f"missing plan kind {kind}" for kind in expect["planKindsIncludes"] if kind not in kinds]
+
+
+def _check_scenario(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "scenario" not in expect:
+        return []
+    ast = body.get("ast") or {}
+    if ast.get("scenario") == expect["scenario"]:
+        return []
+    return [f"scenario expected {expect['scenario']} got {ast.get('scenario')}"]
+
+
+def _check_last_task(expect: dict[str, Any], body: dict[str, Any]) -> list[str]:
+    if "lastTask" not in expect:
+        return []
+    task = _last_task(body.get("plan") or [])
+    if not task:
+        return ["lastTask missing"]
+    return [
+        f"lastTask.{key} mismatch"
+        for key, value in expect["lastTask"].items()
+        if _task_get(task, key) != value
+    ]
+
+
+_EXPECT_CHECKS = (
+    _check_ok,
+    _check_quoted,
+    _check_text,
+    _check_plan_kinds,
+    _check_plan_kinds_includes,
+    _check_scenario,
+    _check_last_task,
+)
+
+
 def _check_case(case: dict[str, Any], body: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
     expect = case.get("expect") or {}
-    if "ok" in expect and body.get("ok") != expect["ok"]:
-        errors.append(f"ok expected {expect['ok']} got {body.get('ok')}")
-    if "quoted" in expect and body.get("quoted") != expect["quoted"]:
-        errors.append(f"quoted mismatch")
-    if "text" in expect and body.get("text") != expect["text"]:
-        errors.append(f"text mismatch")
-    if "planKinds" in expect:
-        kinds = _plan_kinds(body.get("plan") or [])
-        if kinds != expect["planKinds"]:
-            errors.append(f"planKinds expected {expect['planKinds']} got {kinds}")
-    if "planKindsIncludes" in expect:
-        kinds = _plan_kinds(body.get("plan") or [])
-        for kind in expect["planKindsIncludes"]:
-            if kind not in kinds:
-                errors.append(f"missing plan kind {kind}")
-    if "scenario" in expect:
-        ast = body.get("ast") or {}
-        if ast.get("scenario") != expect["scenario"]:
-            errors.append(f"scenario expected {expect['scenario']} got {ast.get('scenario')}")
-    if "lastTask" in expect:
-        task = _last_task(body.get("plan") or [])
-        if not task:
-            errors.append("lastTask missing")
-        else:
-            for key, value in expect["lastTask"].items():
-                if _task_get(task, key) != value:
-                    errors.append(f"lastTask.{key} mismatch")
+    errors: list[str] = []
+    for checker in _EXPECT_CHECKS:
+        errors.extend(checker(expect, body))
     return errors
 
 

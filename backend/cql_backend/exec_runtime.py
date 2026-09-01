@@ -537,6 +537,62 @@ STEP_HANDLERS: dict[str, Callable[..., None]] = {
 }
 
 
+def _coerce_ast(ast: DslAst | dict[str, Any]) -> DslAst:
+    if not isinstance(ast, dict):
+        return ast
+    from pydantic import TypeAdapter
+    from .types import DslAst as DslAstType
+    return TypeAdapter(DslAstType).validate_python(ast)
+
+
+def _run_goal_steps(
+    goal: Any,
+    ctx: ExecContext | None,
+    exec_state: dict[str, Any],
+    helpers: ExecutionHelpers,
+) -> None:
+    steps = getattr(goal, 'steps', None)
+    if not steps:
+        return
+    plan = exec_state['plan']
+    for step in steps:
+        step_type = step.get('type') if isinstance(step, dict) else getattr(step, 'type', None)
+        handler = STEP_HANDLERS.get(step_type)
+        if handler:
+            handler(step, ctx, exec_state, helpers)
+
+
+def _run_legacy_goal(
+    goal: Any,
+    ctx: ExecContext | None,
+    exec_state: dict[str, Any],
+    helpers: ExecutionHelpers,
+) -> None:
+    plan = exec_state['plan']
+    for condition in goal.conditions:
+        cond_type = condition.get('type') if isinstance(condition, dict) else getattr(condition, 'type', None)
+        handler = STEP_HANDLERS.get(cond_type if cond_type == 'if' else 'else')
+        if handler:
+            handler(condition, ctx, exec_state, helpers)
+    for task in goal.tasks:
+        is_pump = str(getattr(task, 'function', '') or '').strip().upper() == 'PUMP'
+        if is_pump:
+            raw = str(getattr(task, 'object', '') or '').strip()
+            plan.append({'kind': 'pump', 'value': raw.split()[0] if raw.split() else raw, 'raw': raw})
+        else:
+            task_dict = {
+                'function': getattr(task, 'function', ''),
+                'object': getattr(task, 'object', ''),
+                'ands': getattr(task, 'ands', []),
+            }
+            plan.append({'kind': 'task', 'task': task_dict})
+        try:
+            if ctx and ctx.executeTasks and ctx.runTask:
+                ctx.runTask(getattr(task, 'function', ''), getattr(task, 'object', ''))
+        except Exception:
+            pass
+
+
 def execute_ast(ast: DslAst | dict[str, Any], ctx: ExecContext | None = None) -> ExecResult:
     """Execute DSL AST using handler registry."""
     errors: list[str] = []
@@ -547,50 +603,14 @@ def execute_ast(ast: DslAst | dict[str, Any], ctx: ExecContext | None = None) ->
 
     helpers = ExecutionHelpers(state, state_units, sample_buffers, ctx)
     exec_state = {'state': state, 'stateUnits': state_units, 'sampleBuffers': sample_buffers, 'plan': plan}
+    ast = _coerce_ast(ast)
 
-    if isinstance(ast, dict):
-        from pydantic import TypeAdapter
-        from .types import DslAst as DslAstType
-        adapter = TypeAdapter(DslAstType)
-        ast = adapter.validate_python(ast)
-
-    for g in ast.goals:
-        plan.append({'kind': 'goal', 'name': g.name})
-
-        # Prefer original textual order if available (new step-based format)
-        steps = getattr(g, 'steps', None)
-        if steps:
-            for s in steps:
-                if isinstance(s, dict):
-                    step_type = s.get('type')
-                else:
-                    step_type = getattr(s, 'type', None)
-                handler = STEP_HANDLERS.get(step_type)
-                if handler:
-                    handler(s, ctx, exec_state, helpers)
+    for goal in ast.goals:
+        plan.append({'kind': 'goal', 'name': goal.name})
+        if getattr(goal, 'steps', None):
+            _run_goal_steps(goal, ctx, exec_state, helpers)
         else:
-            # Fallback: conditions then tasks (legacy format)
-            for c in g.conditions:
-                if isinstance(c, dict):
-                    cond_type = c.get('type')
-                else:
-                    cond_type = getattr(c, 'type', None)
-                handler = STEP_HANDLERS.get(cond_type if cond_type == 'if' else 'else')
-                if handler:
-                    handler(c, ctx, exec_state, helpers)
-            for t in g.tasks:
-                is_pump = str(getattr(t, 'function', '') or '').strip().upper() == 'PUMP'
-                if is_pump:
-                    raw = str(getattr(t, 'object', '') or '').strip()
-                    plan.append({'kind': 'pump', 'value': raw.split()[0] if raw.split() else raw, 'raw': raw})
-                else:
-                    task_dict = {'function': getattr(t, 'function', ''), 'object': getattr(t, 'object', ''), 'ands': getattr(t, 'ands', [])}
-                    plan.append({'kind': 'task', 'task': task_dict})
-                try:
-                    if ctx and ctx.executeTasks and ctx.runTask:
-                        ctx.runTask(getattr(t, 'function', ''), getattr(t, 'object', ''))
-                except Exception:
-                    pass
+            _run_legacy_goal(goal, ctx, exec_state, helpers)
 
     return ExecResult(ok=len(errors) == 0, errors=errors, ast=ast, plan=plan)
 

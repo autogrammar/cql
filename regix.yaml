@@ -1,0 +1,40 @@
+regix:
+  workdir: .
+
+  gates:
+    hard:
+      cc: 15
+      mi: 0
+      length: 150
+      docstring: 0
+
+    target:
+      cc: 10
+      mi: 30
+      length: 100
+      docstring: 30
+
+    on_regression: warn
+    fail_exit_code: 1
+
+  backends:
+    cc: lizard
+    mi: radon
+    coverage: pytest-cov
+    quality: none
+    docstring: builtin
+
+  exclude:
+    - "backend/tests/*"
+    - "packages/*"
+    - "vendor/*"
+    - "docs/*"
+    - "examples/*"
+    - ".venv/*"
+    - "venv/*"
+    - "**/__init__.py"
+
+  output:
+    format: rich
+    dir: .regix/
+    show_improvements: true
