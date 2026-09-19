@@ -1,7 +1,7 @@
 services:
   # ── Traefik Reverse Proxy ──
   traefik:
-    image: traefik:v3.6.2
+    image: traefik:v3.6.2@sha256:36ccc799cfdfbdc722a731f5c0b991508db3ba81e6d134fca53f5a3303d34b1f
     command:
       - "--api.insecure=true"
       - "--api.dashboard=true"

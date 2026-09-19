@@ -7,7 +7,8 @@
     "dev": "vite --port ${VITE_CQL_PORT:-3001}",
     "build": "vite build",
     "preview": "vite preview",
-    "sync:oqlts": "bash scripts/sync-oqlts-vendor.sh"
+    "sync:oqlts": "bash scripts/sync-oqlts-vendor.sh",
+    "prepare": "bash scripts/install-agent-hosts.sh"
   },
   "dependencies": {
     "@semcod/oqlts": "file:vendor/oqlts",
@@ -22,5 +23,10 @@
   "author": {
     "name": "Tom Sapletta",
     "email": "tom@sapletta.com"
+  },
+  "wellmanifest": {
+    "standard": "0.20.35",
+    "revision": "cfaa0bf0ea6b0e7349fed0bb62b5ce15792d687d",
+    "gate": "project/governance-check.sh"
   }
 }

@@ -223,3 +223,26 @@ __marimo__/
 
 # oqlts vendorowany z c2004/packages/oqlts przez sync-oqlts-vendor (build-images-push / build-cql na Pi)
 vendor/oqlts/
+
+!.github/
+!.github/**
+!.cursor/
+!.cursor/**
+!.cursor*
+!.aider*
+!.aider.conf.yml
+!scripts/
+!scripts/**
+!project/
+!project/**
+!.subactor/
+!.subactor/**
+
+# Repository-local worktrees and operational state
+/.worktrees/
+/.subactor/leases/
+/.subactor/sessions/
+/.subactor/recovery/
+/.subactor/receipts/
+/.subactor/cache/
+/.subactor/snapshots/
