@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:20-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # vendor/oqlts musi istnieć przed npm install (dependency file:vendor/oqlts);
@@ -10,7 +10,7 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx:alpine@sha256:83075afea33660ca1911ce1905dee384079ed856397e0e5a9249435b22c35dc8
 # envsubst is bundled in nginx:alpine; template is rendered on container start.
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
